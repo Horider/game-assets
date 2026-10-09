@@ -201,19 +201,38 @@
   }
   canvas.addEventListener('pointermove', event => { state.hover = nearestCell(boardPoint(event)); });
   canvas.addEventListener('pointerleave', () => { state.hover = null; });
+  function archerAt(cell) { return state.archers.find(a => a.lane === cell.lane && a.column === cell.column); }
+  // Upgrading costs a fraction of the next level's price and goes one level at a time.
+  function upgradeCost(archer) {
+    const next = B.archerLevels[archer.level + 1];
+    return next ? Math.round(next.cost * B.upgradeCostFactor) : null;
+  }
+  function upgrade(archer) {
+    const cost = upgradeCost(archer);
+    if (cost === null) { showMessage('Лучник уже максимального уровня'); return; }
+    if (state.gold < cost) { showMessage(`Для улучшения нужно ✦ ${cost}`); return; }
+    const before = B.archerLevels[archer.level], after = B.archerLevels[archer.level + 1];
+    state.gold -= cost;
+    archer.level++;
+    archer.hp += after.health - before.health;
+    archer.glow = .6;
+    showMessage(`${before.name} → ${after.name}`, 1.6);
+    hud();
+  }
+  function canPlace() {
+    return state.scene === 'playing' || (state.scene === 'paused' && $('modal').classList.contains('hidden'));
+  }
   canvas.addEventListener('pointerdown', event => {
-    const quickPause = state.scene === 'paused' && $('modal').classList.contains('hidden');
-    if (state.scene !== 'playing' && !quickPause) return;
+    if (!canPlace()) return;
     const cell = nearestCell(boardPoint(event));
     if (!cell) return;
-    if (state.archers.some(a => a.lane === cell.lane && a.column === cell.column)) {
-      showMessage('Клетка занята'); return;
-    }
+    const existing = archerAt(cell);
+    if (existing) { upgrade(existing); return; }
     const unit = B.archerLevels[state.selected];
     if (state.gold < unit.cost) { showMessage('Не хватает монет'); return; }
     state.gold -= unit.cost;
     // Boots stand on the row's centre line, body rises above it.
-    state.archers.push({ ...cell, footY: cell.y, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0 });
+    state.archers.push({ ...cell, footY: cell.y, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0, glow: .6 });
     hud();
   });
 
@@ -267,6 +286,7 @@
       archer.cooldown -= dt;
       archer.action = Math.max(0, archer.action - dt);
       archer.flash = Math.max(0, archer.flash - dt);
+      archer.glow = Math.max(0, archer.glow - dt);
       const target = state.orcs.filter(o => o.lane === archer.lane && o.x > archer.x + 22 && o.hp > 0).sort((a,b) => a.x-b.x)[0];
       if (target && archer.cooldown <= 0) {
         state.arrows.push({ x: archer.x + 28, y: archer.footY - B.archerBodyHeight * .5, lane: archer.lane, level: archer.level, damage: unit.attack });
@@ -348,6 +368,39 @@
       ctx.fillStyle = '#172012'; ctx.fillRect(archer.x - 35, archer.footY - h - 14, 70, 6);
       ctx.fillStyle = '#90c56c'; ctx.fillRect(archer.x - 34, archer.footY - h - 13, 68 * Math.max(0, archer.hp / unit.health), 4);
     }
+    if (archer.glow) {
+      ctx.strokeStyle = `rgba(255,224,140,${archer.glow * 1.6})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(archer.x, archer.footY, 30 + (.6 - archer.glow) * 60, 10 + (.6 - archer.glow) * 20, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    // Level pips under the archer's feet.
+    for (let i = 0; i <= archer.level; i++) {
+      const px = archer.x + (i - archer.level / 2) * 9;
+      ctx.fillStyle = '#1b130a'; ctx.beginPath(); ctx.arc(px, archer.footY + 17, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f1c86e'; ctx.beginPath(); ctx.arc(px, archer.footY + 17, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function drawHover(cell) {
+    const { left, right, top, bottom } = cell;
+    const archer = archerAt(cell);
+    const cost = archer ? upgradeCost(archer) : B.archerLevels[state.selected].cost;
+    const ok = cost !== null && state.gold >= cost;
+    ctx.fillStyle = ok ? 'rgba(238,207,123,.22)' : 'rgba(180,52,45,.24)';
+    ctx.strokeStyle = ok ? '#e8cb82' : '#b85043';
+    ctx.lineWidth = 2;
+    ctx.fillRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
+    ctx.strokeRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
+  }
+  function drawUpgradeTip(cell) {
+    const archer = archerAt(cell);
+    const cost = upgradeCost(archer);
+    const ok = cost !== null && state.gold >= cost;
+    const label = cost === null ? 'Макс. уровень' : `↑ ${B.archerLevels[archer.level + 1].name}  ✦ ${cost}`;
+    ctx.font = '600 15px Rubik, Arial, sans-serif';
+    const w = ctx.measureText(label).width + 18, y = cell.y - B.archerBodyHeight - 46;
+    ctx.fillStyle = '#182a21ee'; ctx.fillRect(cell.x - w / 2, y, w, 26);
+    ctx.strokeStyle = ok ? '#d1ae6c' : '#8a5a4a'; ctx.lineWidth = 1; ctx.strokeRect(cell.x - w / 2, y, w, 26);
+    ctx.fillStyle = ok ? '#f3e1b6' : '#e7a593'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, cell.x, y + 13);
   }
   function drawOrc(orc, tick) {
     const tier = B.orcLevels[orc.level];
@@ -365,15 +418,7 @@
     const bg = image(B.locations[state.location].image);
     if (bg.complete && bg.naturalWidth) ctx.drawImage(bg, 0, 0, 1672, 941);
     else { ctx.fillStyle = '#354632'; ctx.fillRect(0, 0, 1672, 941); }
-    if (state.hover && state.scene === 'playing') {
-      const { left, right, top, bottom, lane, column } = state.hover;
-      const occupied = state.archers.some(a => a.lane === lane && a.column === column);
-      ctx.fillStyle = occupied ? 'rgba(180,52,45,.24)' : 'rgba(238,207,123,.22)';
-      ctx.strokeStyle = occupied ? '#b85043' : '#e8cb82';
-      ctx.lineWidth = 2;
-      ctx.fillRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
-      ctx.strokeRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
-    }
+    if (state.hover && canPlace()) drawHover(state.hover);
     const tick = state.elapsed;
     // Draw back rows first so lower lanes overlap the ones behind them.
     const actors = [...state.archers, ...state.orcs].sort((a, b) => a.footY - b.footY);
@@ -388,6 +433,8 @@
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(particle.x, particle.y, (1 - particle.life / .35) * 22, -.7, .7); ctx.stroke();
     }
+    // Upgrade tooltip sits above everything so units never hide it.
+    if (state.hover && canPlace() && archerAt(state.hover)) drawUpgradeTip(state.hover);
   }
 
   function loop(now) {

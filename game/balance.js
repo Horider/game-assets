@@ -16,6 +16,7 @@ window.GAME_BALANCE = Object.freeze({
   archerBodyHeight: 112,
   orcBodyHeight: 106,
   speeds: [1, 2, 3],
+  upgradeCostFactor: 0.5, // share of the next level's price; one level per upgrade
   archerLevels: [
     { level: 1, name: 'Разведчик', cost: 65, attack: 22, health: 85, speed: 0.88, color: '#c7b588', sprite: '../characters/animated-v2/archer-level-1-style-matched-fixed.png', body: [[54,340,162],[50,337,167],[72,327,175]], arrow: '../characters/combat-assets-v1/archer-arrows-10/level-01.png' },
     { level: 2, name: 'Стрелок', cost: 100, attack: 34, health: 110, speed: 1.08, color: '#d4b977', sprite: '../characters/animated-v2/archer-level-2-style-matched.png', body: [[65,343,163],[71,346,170],[76,323,174]], arrow: '../characters/combat-assets-v1/archer-arrows-10/level-02.png' },
