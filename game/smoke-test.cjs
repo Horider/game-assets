@@ -32,6 +32,7 @@ const window = { addEventListener: noop };
 class Image { constructor() { this.complete = true; this.naturalWidth = 1810; } set src(value) { this._src = value; assert.ok(fs.existsSync(path.resolve(root, value)), `Missing asset ${value}`); } }
 const context = vm.createContext({ window, document, Image, performance: { now: () => now }, requestAnimationFrame: fn => { frame = fn; }, Math, console });
 vm.runInContext(fs.readFileSync(path.join(root, 'balance.js'), 'utf8'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'grid.js'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(root, 'game.js'), 'utf8'), context);
 
 assert.equal(elements.get('location-list').children.length, 4);
@@ -42,6 +43,10 @@ elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 226 });
 assert.equal(Number(elements.get('gold-value').textContent), 185);
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 226 });
 assert.equal(Number(elements.get('gold-value').textContent), 185, 'Occupied cell must not charge gold');
+elements.get('board').listeners.pointerdown({ clientX: 390, clientY: 226 });
+assert.equal(Number(elements.get('gold-value').textContent), 185, 'One painted tile must map to one cell');
+elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 290 });
+assert.equal(Number(elements.get('gold-value').textContent), 185, 'Grass between rows must not accept placement');
 for (let i = 0; i < 600; i++) { now += 16.67; frame(now); }
 assert.ok(Number(elements.get('gold-value').textContent) > 185, 'Passive income should accrue');
 elements.get('pause-button').listeners.click();
@@ -51,4 +56,14 @@ assert.equal(elements.get('gold-value').textContent, pausedGold, 'Pause should f
 elements.get('modal-actions').children[0].listeners.click();
 for (let i = 0; i < 900; i++) { now += 16.67; frame(now); }
 assert.ok(Number(elements.get('gold-value').textContent) > 329, 'Archer should defeat the first orc and earn a kill reward');
-console.log('Smoke test passed: assets, menu, placement, income, pause, first combat.');
+elements.get('menu-button').listeners.click();
+elements.get('modal-actions').children[1].listeners.click();
+elements.get('location-list').children[1].listeners.click();
+elements.get('start-button').listeners.click();
+elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 257 });
+assert.equal(Number(elements.get('gold-value').textContent), 185);
+elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 257 });
+assert.equal(Number(elements.get('gold-value').textContent), 120, 'Adjacent painted tiles must be separate cells');
+elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 315 });
+assert.equal(Number(elements.get('gold-value').textContent), 120, 'Cemetery row gap must not accept placement');
+console.log('Smoke test passed: assets, tile placement, row gaps, income, pause, first combat.');

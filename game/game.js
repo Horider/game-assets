@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const B = window.GAME_BALANCE;
+  const GRIDS = window.GAME_GRIDS;
   const $ = (id) => document.getElementById(id);
   const canvas = $('board');
   const ctx = canvas.getContext('2d');
@@ -149,16 +150,20 @@
     return { x: (event.clientX - rect.left) * canvas.width / rect.width,
       y: (event.clientY - rect.top) * canvas.height / rect.height };
   }
+  function activeGrid() { return GRIDS[B.locations[state.location].id]; }
+  function cellAt(lane, column) {
+    const grid = activeGrid();
+    const [top, bottom] = grid.rows[lane];
+    const left = grid.left[lane] + column * grid.step;
+    return { lane, column, left, top, right: left + grid.step, bottom,
+      x: left + grid.step / 2, y: (top + bottom) / 2, footY: bottom - 9 };
+  }
   function nearestCell(point) {
-    let best = null;
-    let distance = Infinity;
-    B.laneCenters.forEach((y, lane) => B.columnCenters.forEach((x, column) => {
-      const dx = (point.x - x) / 72;
-      const dy = (point.y - y) / 58;
-      const d = dx * dx + dy * dy;
-      if (d < distance) { distance = d; best = { lane, column, x, y }; }
-    }));
-    return distance <= 1 ? best : null;
+    const grid = activeGrid();
+    const lane = grid.rows.findIndex(([top, bottom]) => point.y >= top && point.y < bottom);
+    if (lane < 0) return null;
+    const column = Math.floor((point.x - grid.left[lane]) / grid.step);
+    return column >= 0 && column < grid.columns ? cellAt(lane, column) : null;
   }
   canvas.addEventListener('pointermove', event => { state.hover = nearestCell(boardPoint(event)); });
   canvas.addEventListener('pointerleave', () => { state.hover = null; });
@@ -183,7 +188,8 @@
     // Cycle lanes before repeating, with a different starting lane each wave.
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
     const hp = Math.round(tier.health * location.enemyHealth);
-    state.orcs.push({ x: B.spawnX + Math.random() * 25, lane, y: B.laneCenters[lane], level: wave.enemyLevel - 1,
+    const laneCell = cellAt(lane, 0);
+    state.orcs.push({ x: B.spawnX + Math.random() * 25, lane, y: laneCell.y, footY: laneCell.footY, level: wave.enemyLevel - 1,
       hp, maxHp: hp, attackClock: 0, action: 0, flash: 0 });
     state.spawned++;
   }
@@ -227,7 +233,7 @@
       archer.flash = Math.max(0, archer.flash - dt);
       const target = state.orcs.filter(o => o.lane === archer.lane && o.x > archer.x + 22 && o.hp > 0).sort((a,b) => a.x-b.x)[0];
       if (target && archer.cooldown <= 0) {
-        state.arrows.push({ x: archer.x + 39, y: archer.y - 12, lane: archer.lane, level: archer.level, damage: unit.attack });
+        state.arrows.push({ x: archer.x + 28, y: archer.footY - 55, lane: archer.lane, level: archer.level, damage: unit.attack });
         archer.cooldown = 1 / unit.speed;
         archer.action = .48;
       }
@@ -239,7 +245,7 @@
       if (target) {
         target.hp -= arrow.damage;
         target.flash = .13;
-        state.particles.push({ x: target.x, y: target.y - 13, life: .35 });
+        state.particles.push({ x: target.x, y: arrow.y, life: .35 });
         state.arrows.splice(i, 1);
         if (target.hp <= 0) {
           state.gold += Math.round(B.killGold * B.locations[state.location].reward);
@@ -282,55 +288,50 @@
     state.particles = state.particles.filter(p => p.life > 0);
   }
 
-  function drawSprite(path, frame, row, x, y, size, columns) {
+  function drawSprite(path, frame, row, x, footY, size, columns, sourceFoot) {
     const img = image(path);
     if (!img.complete || !img.naturalWidth) return;
     const sourceSize = img.naturalWidth / columns;
     ctx.drawImage(img, frame * sourceSize, row * sourceSize, sourceSize, sourceSize,
-      x - size / 2, y - size / 2, size, size);
+      x - size / 2, footY - sourceFoot / sourceSize * size, size, size);
   }
   function draw() {
     if (state.scene === 'menu') return;
     const bg = image(B.locations[state.location].image);
     if (bg.complete && bg.naturalWidth) ctx.drawImage(bg, 0, 0, 1672, 941);
     else { ctx.fillStyle = '#354632'; ctx.fillRect(0, 0, 1672, 941); }
-    ctx.fillStyle = 'rgba(6,22,12,.19)';
-    ctx.fillRect(190, 163, 1280, 627);
     if (state.hover && state.scene === 'playing') {
-      const { x, y, lane, column } = state.hover;
+      const { left, right, top, bottom, lane, column } = state.hover;
       const occupied = state.archers.some(a => a.lane === lane && a.column === column);
-      ctx.fillStyle = occupied ? 'rgba(180,52,45,.35)' : 'rgba(238,207,123,.28)';
+      ctx.fillStyle = occupied ? 'rgba(180,52,45,.24)' : 'rgba(238,207,123,.22)';
       ctx.strokeStyle = occupied ? '#b85043' : '#e8cb82';
-      ctx.lineWidth = 3;
-      ctx.fillRect(x - 65, y - 54, 130, 108);
-      ctx.strokeRect(x - 65, y - 54, 130, 108);
+      ctx.lineWidth = 2;
+      ctx.fillRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
+      ctx.strokeRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
     }
-    // A small gate line clarifies where the defenders must hold.
-    ctx.fillStyle = '#f0c371b3';
-    ctx.fillRect(B.gateX - 4, 175, 4, 600);
     const tick = state.elapsed;
     for (const archer of state.archers) {
       const unit = B.archerLevels[archer.level];
       const frame = Math.floor(tick * 3.8 + archer.column) % 5;
       const row = archer.action > 0 ? 2 : 0;
       const actionFrame = archer.action > 0 ? Math.min(4, Math.floor((.48 - archer.action) * 10)) : frame;
-      ctx.fillStyle = '#07110a68'; ctx.beginPath(); ctx.ellipse(archer.x, archer.y + 46, 43, 10, 0, 0, Math.PI * 2); ctx.fill();
-      drawSprite(unit.sprite, actionFrame, row, archer.x, archer.y - 10, 161, 5);
-      if (archer.flash) { ctx.fillStyle = `rgba(255,80,56,${archer.flash * 1.8})`; ctx.fillRect(archer.x - 50, archer.y - 66, 100, 115); }
+      ctx.fillStyle = '#07110a68'; ctx.beginPath(); ctx.ellipse(archer.x, archer.footY - 3, 35, 8, 0, 0, Math.PI * 2); ctx.fill();
+      drawSprite(unit.sprite, actionFrame, row, archer.x, archer.footY, 138, 5, row === 2 ? 328 : 341);
+      if (archer.flash) { ctx.fillStyle = `rgba(255,80,56,${archer.flash * 1.8})`; ctx.fillRect(archer.x - 42, archer.footY - 110, 84, 110); }
       if (archer.hp < unit.health) {
-        ctx.fillStyle = '#172012'; ctx.fillRect(archer.x - 35, archer.y - 64, 70, 6);
-        ctx.fillStyle = '#90c56c'; ctx.fillRect(archer.x - 34, archer.y - 63, 68 * Math.max(0, archer.hp / unit.health), 4);
+        ctx.fillStyle = '#172012'; ctx.fillRect(archer.x - 35, archer.footY - 125, 70, 6);
+        ctx.fillStyle = '#90c56c'; ctx.fillRect(archer.x - 34, archer.footY - 124, 68 * Math.max(0, archer.hp / unit.health), 4);
       }
     }
     for (const orc of state.orcs) {
       const tier = B.orcLevels[orc.level];
       const frame = Math.floor(tick * 5 + orc.lane) % 4;
-      ctx.fillStyle = '#08100880'; ctx.beginPath(); ctx.ellipse(orc.x, orc.y + 47, 48, 10, 0, 0, Math.PI * 2); ctx.fill();
-      drawSprite(tier.sprite, frame, orc.action > 0 ? 2 : 1, orc.x, orc.y - 8, 168, 4);
-      if (orc.flash) { ctx.fillStyle = `rgba(255,234,159,${orc.flash * 3})`; ctx.fillRect(orc.x - 47, orc.y - 65, 94, 115); }
-      ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.y - 68, 84, 11);
-      ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.y - 66, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
-      ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.y - 68, 84, 11);
+      ctx.fillStyle = '#08100880'; ctx.beginPath(); ctx.ellipse(orc.x, orc.footY - 3, 40, 8, 0, 0, Math.PI * 2); ctx.fill();
+      drawSprite(tier.sprite, frame, orc.action > 0 ? 2 : 1, orc.x, orc.footY, 145, 4, 362);
+      if (orc.flash) { ctx.fillStyle = `rgba(255,234,159,${orc.flash * 3})`; ctx.fillRect(orc.x - 40, orc.footY - 130, 80, 130); }
+      ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.footY - 160, 84, 11);
+      ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.footY - 158, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
+      ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.footY - 160, 84, 11);
     }
     for (const arrow of state.arrows) {
       const img = image(B.archerLevels[arrow.level].arrow);
