@@ -24,7 +24,11 @@ function element(id = '') {
     getContext: () => new Proxy({}, { get: () => noop })
   };
 }
+const speedButtons = [0, 1, 2, 3].map(speed => Object.assign(element(), { dataset: { speed: String(speed) } }));
+const pressed = () => speedButtons.findIndex(b => b.pressed === 'true');
+speedButtons.forEach(b => { b.setAttribute = (name, value) => { b.pressed = value; }; });
 const document = {
+  querySelectorAll: () => speedButtons,
   getElementById(id) { if (!elements.has(id)) elements.set(id, element(id)); return elements.get(id); },
   createElement() { return element(); }
 };
@@ -49,11 +53,18 @@ elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 290 });
 assert.equal(Number(elements.get('gold-value').textContent), 185, 'Grass between rows must not accept placement');
 for (let i = 0; i < 600; i++) { now += 16.67; frame(now); }
 assert.ok(Number(elements.get('gold-value').textContent) > 185, 'Passive income should accrue');
-elements.get('pause-button').listeners.click();
+assert.equal(pressed(), 1, '1x is the default speed');
+speedButtons[0].listeners.click();
+assert.equal(pressed(), 0, 'Pause button shows as pressed');
 const pausedGold = elements.get('gold-value').textContent;
 for (let i = 0; i < 300; i++) { now += 16.67; frame(now); }
 assert.equal(elements.get('gold-value').textContent, pausedGold, 'Pause should freeze income');
-elements.get('modal-actions').children[0].listeners.click();
+speedButtons[3].listeners.click();
+assert.equal(pressed(), 3, '3x resumes from pause');
+let fastGold = Number(elements.get('gold-value').textContent);
+for (let i = 0; i < 80; i++) { now += 16.67; frame(now); }
+assert.ok(Number(elements.get('gold-value').textContent) > fastGold, '3x should earn passive income in ~1.3 real seconds');
+speedButtons[1].listeners.click();
 for (let i = 0; i < 900; i++) { now += 16.67; frame(now); }
 assert.ok(Number(elements.get('gold-value').textContent) > 329, 'Archer should defeat the first orc and earn a kill reward');
 elements.get('menu-button').listeners.click();
@@ -66,4 +77,4 @@ elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 257 });
 assert.equal(Number(elements.get('gold-value').textContent), 120, 'Adjacent painted tiles must be separate cells');
 elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 315 });
 assert.equal(Number(elements.get('gold-value').textContent), 120, 'Cemetery row gap must not accept placement');
-console.log('Smoke test passed: assets, tile placement, row gaps, income, pause, first combat.');
+console.log('Smoke test passed: assets, tile placement, row gaps, income, pause, speed controls, first combat.');

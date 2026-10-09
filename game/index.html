@@ -35,7 +35,12 @@
           <div class="readout"><span class="readout-icon">♥</span><span><small>Ворота</small><strong id="lives-value">5</strong></span></div>
         </div>
         <div class="header-actions">
-          <button id="pause-button" type="button">Пауза</button>
+          <div class="speed-bar" role="group" aria-label="Скорость игры">
+            <button id="pause-button" type="button" data-speed="0" aria-label="Пауза" title="Пауза (пробел)">❚❚</button>
+            <button type="button" data-speed="1" aria-pressed="true">1x</button>
+            <button type="button" data-speed="2">2x</button>
+            <button type="button" data-speed="3">3x</button>
+          </div>
           <button id="menu-button" type="button">Меню</button>
         </div>
       </header>

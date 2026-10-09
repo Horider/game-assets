@@ -11,7 +11,7 @@
     archers: [], orcs: [], arrows: [], particles: [],
     wave: 0, spawned: 0, spawnClock: 0, intermission: B.firstWaveDelay,
     goldClock: 0, elapsed: 0, hover: null, notificationUntil: 0,
-    lastFrame: 0
+    lastFrame: 0, speed: 1
   };
 
   function image(path) {
@@ -90,12 +90,13 @@
       archers: [], orcs: [], arrows: [], particles: [],
       wave: 0, spawned: 0, spawnClock: 0,
       intermission: B.firstWaveDelay, goldClock: 0,
-      elapsed: 0, hover: null, notificationUntil: 0
+      elapsed: 0, hover: null, notificationUntil: 0, speed: 1
     });
     $('menu').classList.add('hidden');
     $('game-screen').classList.remove('hidden');
     $('location-name').textContent = B.locations[state.location].name;
     selectArcher(0);
+    refreshSpeed();
     hud();
     showMessage('Расставь лучников — первая волна скоро придёт', 4);
   }
@@ -126,16 +127,46 @@
 
   function closeModal() { $('modal').classList.add('hidden'); }
 
+  // Quick pause from the speed bar: freezes the field without a dialog,
+  // so towers can still be placed while thinking.
+  function setSpeed(speed) {
+    if (state.scene === 'paused' && !$('modal').classList.contains('hidden')) return;
+    if (speed === 0) {
+      if (state.scene !== 'playing') return;
+      state.scene = 'paused';
+      showMessage('Пауза — выбери скорость, чтобы продолжить', Infinity);
+    } else {
+      state.speed = speed;
+      if (state.scene === 'paused') resume();
+    }
+    refreshSpeed();
+  }
+  function togglePause() { setSpeed(state.scene === 'playing' ? 0 : state.speed); }
+  function refreshSpeed() {
+    const paused = state.scene === 'paused';
+    document.querySelectorAll('[data-speed]').forEach(button => {
+      const value = Number(button.dataset.speed);
+      button.setAttribute('aria-pressed', String(value === 0 ? paused : !paused && value === state.speed));
+    });
+  }
+
   function pause() {
     if (state.scene !== 'playing') return;
     state.scene = 'paused';
+    refreshSpeed();
     showModal('Ⅱ', 'Пауза', 'Оборона ждёт твоего приказа.', [
       { text: 'Продолжить', action: resume },
       { text: 'Начать заново', action: startGame, secondary: true },
       { text: 'В меню', action: showMenu, secondary: true }
     ]);
   }
-  function resume() { closeModal(); state.scene = 'playing'; state.lastFrame = performance.now(); }
+  function resume() {
+    closeModal();
+    state.scene = 'playing';
+    state.lastFrame = performance.now();
+    if (state.notificationUntil === Infinity) { $('board-message').classList.remove('visible'); state.notificationUntil = 0; }
+    refreshSpeed();
+  }
   function finish(victory) {
     state.scene = victory ? 'won' : 'lost';
     showModal(victory ? '✦' : '✕', victory ? 'Форпост устоял' : 'Ворота пали',
@@ -156,7 +187,7 @@
     const [top, bottom] = grid.rows[lane];
     const left = grid.left[lane] + column * grid.step;
     return { lane, column, left, top, right: left + grid.step, bottom,
-      x: left + grid.step / 2, y: (top + bottom) / 2, footY: bottom - 9 };
+      x: left + grid.step / 2, y: (top + bottom) / 2, footY: (top + bottom) / 2 };
   }
   function nearestCell(point) {
     const grid = activeGrid();
@@ -168,7 +199,8 @@
   canvas.addEventListener('pointermove', event => { state.hover = nearestCell(boardPoint(event)); });
   canvas.addEventListener('pointerleave', () => { state.hover = null; });
   canvas.addEventListener('pointerdown', event => {
-    if (state.scene !== 'playing') return;
+    const quickPause = state.scene === 'paused' && $('modal').classList.contains('hidden');
+    if (state.scene !== 'playing' && !quickPause) return;
     const cell = nearestCell(boardPoint(event));
     if (!cell) return;
     if (state.archers.some(a => a.lane === cell.lane && a.column === cell.column)) {
@@ -189,7 +221,7 @@
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
     const hp = Math.round(tier.health * location.enemyHealth);
     const laneCell = cellAt(lane, 0);
-    state.orcs.push({ x: B.spawnX + Math.random() * 25, lane, y: laneCell.y, footY: laneCell.footY, level: wave.enemyLevel - 1,
+    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.footY, level: wave.enemyLevel - 1,
       hp, maxHp: hp, attackClock: 0, action: 0, flash: 0 });
     state.spawned++;
   }
@@ -233,7 +265,7 @@
       archer.flash = Math.max(0, archer.flash - dt);
       const target = state.orcs.filter(o => o.lane === archer.lane && o.x > archer.x + 22 && o.hp > 0).sort((a,b) => a.x-b.x)[0];
       if (target && archer.cooldown <= 0) {
-        state.arrows.push({ x: archer.x + 28, y: archer.footY - 55, lane: archer.lane, level: archer.level, damage: unit.attack });
+        state.arrows.push({ x: archer.x + 28, y: archer.footY - B.archerBodyHeight * .5, lane: archer.lane, level: archer.level, damage: unit.attack });
         archer.cooldown = 1 / unit.speed;
         archer.action = .48;
       }
@@ -288,12 +320,41 @@
     state.particles = state.particles.filter(p => p.life > 0);
   }
 
-  function drawSprite(path, frame, row, x, footY, size, columns, sourceFoot) {
+  // Scales each sheet row by its measured body so every pose has the same
+  // on-screen height, boots on footY and body centred on x.
+  function drawSprite(path, frame, row, x, footY, bodyHeight, columns, body) {
     const img = image(path);
     if (!img.complete || !img.naturalWidth) return;
     const sourceSize = img.naturalWidth / columns;
+    const [top, foot, centerX] = body[row];
+    const scale = bodyHeight / (foot - top);
     ctx.drawImage(img, frame * sourceSize, row * sourceSize, sourceSize, sourceSize,
-      x - size / 2, footY - sourceFoot / sourceSize * size, size, size);
+      x - centerX * scale, footY - foot * scale, sourceSize * scale, sourceSize * scale);
+  }
+  function drawArcher(archer, tick) {
+    const unit = B.archerLevels[archer.level];
+    const h = B.archerBodyHeight;
+    const frame = Math.floor(tick * 3.8 + archer.column) % 5;
+    const row = archer.action > 0 ? 2 : 0;
+    const actionFrame = archer.action > 0 ? Math.min(4, Math.floor((.48 - archer.action) * 10)) : frame;
+    ctx.fillStyle = '#07110a68'; ctx.beginPath(); ctx.ellipse(archer.x, archer.footY - 3, 35, 8, 0, 0, Math.PI * 2); ctx.fill();
+    drawSprite(unit.sprite, actionFrame, row, archer.x, archer.footY, h, 5, unit.body);
+    if (archer.flash) { ctx.fillStyle = `rgba(255,80,56,${archer.flash * 1.8})`; ctx.fillRect(archer.x - 42, archer.footY - h, 84, h); }
+    if (archer.hp < unit.health) {
+      ctx.fillStyle = '#172012'; ctx.fillRect(archer.x - 35, archer.footY - h - 14, 70, 6);
+      ctx.fillStyle = '#90c56c'; ctx.fillRect(archer.x - 34, archer.footY - h - 13, 68 * Math.max(0, archer.hp / unit.health), 4);
+    }
+  }
+  function drawOrc(orc, tick) {
+    const tier = B.orcLevels[orc.level];
+    const h = B.orcBodyHeight;
+    const frame = Math.floor(tick * 5 + orc.lane) % 4;
+    ctx.fillStyle = '#08100880'; ctx.beginPath(); ctx.ellipse(orc.x, orc.footY - 3, 40, 8, 0, 0, Math.PI * 2); ctx.fill();
+    drawSprite(tier.sprite, frame, orc.action > 0 ? 2 : 1, orc.x, orc.footY, h, 4, tier.body);
+    if (orc.flash) { ctx.fillStyle = `rgba(255,234,159,${orc.flash * 3})`; ctx.fillRect(orc.x - 40, orc.footY - h, 80, h); }
+    ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.footY - h - 20, 84, 11);
+    ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.footY - h - 18, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
+    ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.footY - h - 20, 84, 11);
   }
   function draw() {
     if (state.scene === 'menu') return;
@@ -310,29 +371,9 @@
       ctx.strokeRect(left + 5, top + 5, right - left - 10, bottom - top - 10);
     }
     const tick = state.elapsed;
-    for (const archer of state.archers) {
-      const unit = B.archerLevels[archer.level];
-      const frame = Math.floor(tick * 3.8 + archer.column) % 5;
-      const row = archer.action > 0 ? 2 : 0;
-      const actionFrame = archer.action > 0 ? Math.min(4, Math.floor((.48 - archer.action) * 10)) : frame;
-      ctx.fillStyle = '#07110a68'; ctx.beginPath(); ctx.ellipse(archer.x, archer.footY - 3, 35, 8, 0, 0, Math.PI * 2); ctx.fill();
-      drawSprite(unit.sprite, actionFrame, row, archer.x, archer.footY, 138, 5, row === 2 ? 328 : 341);
-      if (archer.flash) { ctx.fillStyle = `rgba(255,80,56,${archer.flash * 1.8})`; ctx.fillRect(archer.x - 42, archer.footY - 110, 84, 110); }
-      if (archer.hp < unit.health) {
-        ctx.fillStyle = '#172012'; ctx.fillRect(archer.x - 35, archer.footY - 125, 70, 6);
-        ctx.fillStyle = '#90c56c'; ctx.fillRect(archer.x - 34, archer.footY - 124, 68 * Math.max(0, archer.hp / unit.health), 4);
-      }
-    }
-    for (const orc of state.orcs) {
-      const tier = B.orcLevels[orc.level];
-      const frame = Math.floor(tick * 5 + orc.lane) % 4;
-      ctx.fillStyle = '#08100880'; ctx.beginPath(); ctx.ellipse(orc.x, orc.footY - 3, 40, 8, 0, 0, Math.PI * 2); ctx.fill();
-      drawSprite(tier.sprite, frame, orc.action > 0 ? 2 : 1, orc.x, orc.footY, 145, 4, 362);
-      if (orc.flash) { ctx.fillStyle = `rgba(255,234,159,${orc.flash * 3})`; ctx.fillRect(orc.x - 40, orc.footY - 130, 80, 130); }
-      ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.footY - 160, 84, 11);
-      ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.footY - 158, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
-      ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.footY - 160, 84, 11);
-    }
+    // Draw back rows first so lower lanes overlap the ones behind them.
+    const actors = [...state.archers, ...state.orcs].sort((a, b) => a.footY - b.footY);
+    for (const actor of actors) 'column' in actor ? drawArcher(actor, tick) : drawOrc(actor, tick);
     for (const arrow of state.arrows) {
       const img = image(B.archerLevels[arrow.level].arrow);
       if (img.complete && img.naturalWidth) ctx.drawImage(img, 5, 125, 350, 112, arrow.x - 21, arrow.y - 8, 58, 19);
@@ -348,13 +389,15 @@
   function loop(now) {
     const dt = Math.min((now - (state.lastFrame || now)) / 1000, .05);
     state.lastFrame = now;
-    if (state.scene === 'playing') update(dt);
+    // Faster speeds run extra fixed steps so arrows never skip past orcs.
+    for (let i = 0; i < state.speed && state.scene === 'playing'; i++) update(dt);
     if (state.scene !== 'menu') draw();
     requestAnimationFrame(loop);
   }
 
   $('start-button').addEventListener('click', startGame);
-  $('pause-button').addEventListener('click', pause);
+  document.querySelectorAll('[data-speed]').forEach(button =>
+    button.addEventListener('click', () => setSpeed(Number(button.dataset.speed))));
   $('menu-button').addEventListener('click', () => {
     if (state.scene === 'playing') pause();
     showModal('⌂', 'Вернуться в меню?', 'Текущая оборона начнётся заново, если ты снова выберешь локацию.', [
@@ -364,7 +407,7 @@
   });
   window.addEventListener('keydown', event => {
     if (['Digit1','Digit2','Digit3','Digit4'].includes(event.code) && state.scene === 'playing') selectArcher(Number(event.code.at(-1)) - 1);
-    if (event.code === 'Space') { event.preventDefault(); if (state.scene === 'playing') pause(); else if (state.scene === 'paused') resume(); }
+    if (event.code === 'Space') { event.preventDefault(); togglePause(); }
     if (event.code === 'Escape' && state.scene === 'playing') pause();
   });
   buildMenu();
