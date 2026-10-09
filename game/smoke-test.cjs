@@ -47,7 +47,7 @@ elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 226 });
 assert.equal(Number(elements.get('gold-value').textContent), 185);
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 226 });
 assert.equal(Number(elements.get('gold-value').textContent), 185, 'Occupied cell must not charge gold');
-elements.get('board').listeners.pointerdown({ clientX: 390, clientY: 226 });
+elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 226 });
 assert.equal(Number(elements.get('gold-value').textContent), 185, 'One painted tile must map to one cell');
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 290 });
 assert.equal(Number(elements.get('gold-value').textContent), 185, 'Grass between rows must not accept placement');

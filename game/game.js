@@ -185,15 +185,18 @@
   function cellAt(lane, column) {
     const grid = activeGrid();
     const [top, bottom] = grid.rows[lane];
-    const left = grid.left[lane] + column * grid.step;
-    return { lane, column, left, top, right: left + grid.step, bottom,
-      x: left + grid.step / 2, y: (top + bottom) / 2 };
+    const step = grid.step[lane];
+    const right = grid.left[lane] + (column + 1) * step;
+    const left = Math.max(right - step, grid.minX ? grid.minX[lane] : 0);
+    return { lane, column, left, top, right, bottom,
+      x: (left + right) / 2, y: (top + bottom) / 2 };
   }
   function nearestCell(point) {
     const grid = activeGrid();
     const lane = grid.rows.findIndex(([top, bottom]) => point.y >= top && point.y < bottom);
     if (lane < 0) return null;
-    const column = Math.floor((point.x - grid.left[lane]) / grid.step);
+    if (grid.minX && point.x < grid.minX[lane]) return null;
+    const column = Math.floor((point.x - grid.left[lane]) / grid.step[lane]);
     return column >= 0 && column < grid.columns ? cellAt(lane, column) : null;
   }
   canvas.addEventListener('pointermove', event => { state.hover = nearestCell(boardPoint(event)); });
@@ -209,8 +212,8 @@
     const unit = B.archerLevels[state.selected];
     if (state.gold < unit.cost) { showMessage('Не хватает монет'); return; }
     state.gold -= unit.cost;
-    // Middle of the body sits on the row's centre line, boots below it.
-    state.archers.push({ ...cell, footY: cell.y + B.archerBodyHeight / 2, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0 });
+    // Boots stand on the row's centre line, body rises above it.
+    state.archers.push({ ...cell, footY: cell.y, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0 });
     hud();
   });
 
@@ -222,7 +225,7 @@
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
     const hp = Math.round(tier.health * location.enemyHealth);
     const laneCell = cellAt(lane, 0);
-    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y + B.orcBodyHeight / 2, level: wave.enemyLevel - 1,
+    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y, level: wave.enemyLevel - 1,
       hp, maxHp: hp, attackClock: 0, action: 0, flash: 0 });
     state.spawned++;
   }
