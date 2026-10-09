@@ -187,7 +187,7 @@
     const [top, bottom] = grid.rows[lane];
     const left = grid.left[lane] + column * grid.step;
     return { lane, column, left, top, right: left + grid.step, bottom,
-      x: left + grid.step / 2, y: (top + bottom) / 2, footY: (top + bottom) / 2 };
+      x: left + grid.step / 2, y: (top + bottom) / 2 };
   }
   function nearestCell(point) {
     const grid = activeGrid();
@@ -209,7 +209,8 @@
     const unit = B.archerLevels[state.selected];
     if (state.gold < unit.cost) { showMessage('Не хватает монет'); return; }
     state.gold -= unit.cost;
-    state.archers.push({ ...cell, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0 });
+    // Middle of the body sits on the row's centre line, boots below it.
+    state.archers.push({ ...cell, footY: cell.y + B.archerBodyHeight / 2, level: state.selected, hp: unit.health, cooldown: .22, action: 0, flash: 0 });
     hud();
   });
 
@@ -221,7 +222,7 @@
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
     const hp = Math.round(tier.health * location.enemyHealth);
     const laneCell = cellAt(lane, 0);
-    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.footY, level: wave.enemyLevel - 1,
+    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y + B.orcBodyHeight / 2, level: wave.enemyLevel - 1,
       hp, maxHp: hp, attackClock: 0, action: 0, flash: 0 });
     state.spawned++;
   }
