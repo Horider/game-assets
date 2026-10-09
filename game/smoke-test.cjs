@@ -43,16 +43,17 @@ vm.runInContext(fs.readFileSync(path.join(root, 'game.js'), 'utf8'), context);
 
 assert.equal(elements.get('location-list').children.length, 4);
 assert.equal(elements.get('archer-cards').children.length, 4);
+assert.equal(elements.get('difficulty-list').children.length, 3, 'Menu offers three difficulties');
 elements.get('start-button').listeners.click();
-assert.equal(Number(elements.get('gold-value').textContent), 250);
+assert.equal(Number(elements.get('gold-value').textContent), 210);
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 226 });
-assert.equal(Number(elements.get('gold-value').textContent), 185);
+assert.equal(Number(elements.get('gold-value').textContent), 145);
 elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 226 });
-assert.equal(Number(elements.get('gold-value').textContent), 135, 'Clicking the same tile upgrades its archer for half the next price');
+assert.equal(Number(elements.get('gold-value').textContent), 95, 'Clicking the same tile upgrades its archer for half the next price');
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 290 });
-assert.equal(Number(elements.get('gold-value').textContent), 135, 'Grass between rows must not accept placement');
+assert.equal(Number(elements.get('gold-value').textContent), 95, 'Grass between rows must not accept placement');
 for (let i = 0; i < 600; i++) { now += 16.67; frame(now); }
-assert.ok(Number(elements.get('gold-value').textContent) > 135, 'Passive income should accrue');
+assert.ok(Number(elements.get('gold-value').textContent) > 95, 'Passive income should accrue');
 assert.equal(pressed(), 1, '1x is the default speed');
 speedButtons[0].listeners.click();
 assert.equal(pressed(), 0, 'Pause button shows as pressed');
@@ -66,19 +67,20 @@ for (let i = 0; i < 80; i++) { now += 16.67; frame(now); }
 assert.ok(Number(elements.get('gold-value').textContent) > fastGold, '3x should earn passive income in ~1.3 real seconds');
 speedButtons[1].listeners.click();
 for (let i = 0; i < 900; i++) { now += 16.67; frame(now); }
-assert.ok(Number(elements.get('gold-value').textContent) > 279, 'Archer should defeat the first orc and earn a kill reward');
+const { state } = window.GAME_DEBUG;
+assert.ok(state.spawned > state.orcs.length && state.lives === 5, 'Archer should defeat the first orc before it reaches the gate');
 elements.get('menu-button').listeners.click();
 elements.get('modal-actions').children[1].listeners.click();
 elements.get('location-list').children[1].listeners.click();
 elements.get('start-button').listeners.click();
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 257 });
-assert.equal(Number(elements.get('gold-value').textContent), 185);
+assert.equal(Number(elements.get('gold-value').textContent), 145);
 elements.get('board').listeners.pointerdown({ clientX: 360, clientY: 257 });
-assert.equal(Number(elements.get('gold-value').textContent), 120, 'Adjacent painted tiles must be separate cells');
+assert.equal(Number(elements.get('gold-value').textContent), 80, 'Adjacent painted tiles must be separate cells');
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 257 });
-assert.equal(Number(elements.get('gold-value').textContent), 70, 'Level 1 → 2 costs half of 100');
+assert.equal(Number(elements.get('gold-value').textContent), 30, 'Level 1 → 2 costs half of 100');
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 257 });
-assert.equal(Number(elements.get('gold-value').textContent), 70, 'Level 2 → 3 needs 73 gold, so nothing happens');
+assert.equal(Number(elements.get('gold-value').textContent), 30, 'Level 2 → 3 needs 73 gold, so nothing happens');
 while (Number(elements.get('gold-value').textContent) < 73) { now += 16.67; frame(now); }
 const beforeThird = Number(elements.get('gold-value').textContent);
 elements.get('board').listeners.pointerdown({ clientX: 335, clientY: 257 });

@@ -7,7 +7,7 @@
   const ctx = canvas.getContext('2d');
   const images = new Map();
   const state = {
-    scene: 'menu', location: 0, selected: 0, gold: 0, lives: 0,
+    scene: 'menu', location: 0, difficulty: 1, selected: 0, gold: 0, lives: 0, queue: [],
     archers: [], orcs: [], arrows: [], particles: [],
     wave: 0, spawned: 0, spawnClock: 0, intermission: B.firstWaveDelay,
     goldClock: 0, elapsed: 0, hover: null, notificationUntil: 0,
@@ -25,6 +25,22 @@
   B.archerLevels.forEach(a => { image(a.sprite); image(a.arrow); });
   B.orcLevels.forEach(o => image(o.sprite));
   B.locations.forEach(l => image(l.image));
+
+  function buildDifficulty() {
+    $('difficulty-list').innerHTML = '';
+    B.difficulties.forEach((mode, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'difficulty-card' + (index === state.difficulty ? ' selected' : '');
+      button.setAttribute('aria-pressed', String(index === state.difficulty));
+      button.innerHTML = `<span>${mode.name}</span><small>${mode.subtitle}</small>`;
+      button.addEventListener('click', () => {
+        state.difficulty = index;
+        buildDifficulty();
+      });
+      $('difficulty-list').append(button);
+    });
+  }
 
   function buildMenu() {
     $('location-list').innerHTML = '';
@@ -86,15 +102,15 @@
   function startGame() {
     closeModal();
     Object.assign(state, {
-      scene: 'playing', gold: B.startingGold, lives: B.startingLives,
+      scene: 'playing', gold: difficulty().startingGold, lives: difficulty().startingLives,
       archers: [], orcs: [], arrows: [], particles: [],
-      wave: 0, spawned: 0, spawnClock: 0,
+      wave: 0, spawned: 0, spawnClock: 0, queue: waveQueue(0),
       intermission: B.firstWaveDelay, goldClock: 0,
       elapsed: 0, hover: null, notificationUntil: 0, speed: 1
     });
     $('menu').classList.add('hidden');
     $('game-screen').classList.remove('hidden');
-    $('location-name').textContent = B.locations[state.location].name;
+    $('location-name').textContent = `${B.locations[state.location].name} · ${difficulty().name}`;
     selectArcher(0);
     refreshSpeed();
     hud();
@@ -236,16 +252,27 @@
     hud();
   });
 
+  function difficulty() { return B.difficulties[state.difficulty]; }
+  // Spreads each wave's orc levels evenly through the wave, weakest first,
+  // so stronger orcs arrive among the weaker ones instead of in one clump.
+  function waveQueue(index) {
+    const items = [];
+    for (const [level, count] of B.waves[index].groups)
+      for (let i = 0; i < count; i++) items.push({ level, key: (i + .5) / count + level * 1e-3 });
+    return items.sort((a, b) => a.key - b.key).map(item => item.level);
+  }
   function spawnOrc() {
-    const wave = B.waves[state.wave];
-    const tier = B.orcLevels[wave.enemyLevel - 1];
+    const level = state.queue[state.spawned] - 1;
+    const tier = B.orcLevels[level];
     const location = B.locations[state.location];
+    const mode = difficulty();
     // Cycle lanes before repeating, with a different starting lane each wave.
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
-    const hp = Math.round(tier.health * location.enemyHealth);
+    const hp = Math.round(tier.health * location.enemyHealth * mode.enemyHealth);
     const laneCell = cellAt(lane, 0);
-    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y, level: wave.enemyLevel - 1,
-      hp, maxHp: hp, attackClock: 0, action: 0, flash: 0 });
+    state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y, level,
+      hp, maxHp: hp, damage: tier.damage * mode.enemyDamage, speed: tier.speed * mode.enemySpeed,
+      attackClock: 0, action: 0, flash: 0 });
     state.spawned++;
   }
 
@@ -258,13 +285,13 @@
     state.goldClock += dt;
     while (state.goldClock >= B.goldInterval) {
       state.goldClock -= B.goldInterval;
-      state.gold += B.passiveGold;
+      state.gold += difficulty().passiveGold;
       hud();
     }
     if (state.intermission > 0) {
       state.intermission -= dt;
       if (state.intermission <= 0) showMessage(`Волна ${state.wave + 1} наступает!`, 2);
-    } else if (state.spawned < B.waves[state.wave].count) {
+    } else if (state.spawned < state.queue.length) {
       state.spawnClock -= dt;
       if (state.spawnClock <= 0) {
         spawnOrc();
@@ -275,10 +302,11 @@
       state.wave++;
       state.spawned = 0;
       state.spawnClock = 0;
+      state.queue = waveQueue(state.wave);
       state.intermission = B.betweenWaves;
-      state.gold += 60;
+      state.gold += B.waveBonus;
       hud();
-      showMessage(`Волна отбита! +60 монет. Следующая через ${B.betweenWaves} сек.`, 3.5);
+      showMessage(`Волна отбита! +${B.waveBonus} монет. Следующая через ${B.betweenWaves} сек.`, 3.5);
     }
 
     for (const archer of state.archers) {
@@ -304,7 +332,7 @@
         state.particles.push({ x: target.x, y: arrow.y, life: .35 });
         state.arrows.splice(i, 1);
         if (target.hp <= 0) {
-          state.gold += Math.round(B.killGold * B.locations[state.location].reward);
+          state.gold += Math.round(B.orcLevels[target.level].reward * B.locations[state.location].reward * difficulty().reward);
           hud();
         }
       } else if (arrow.x > 1690) state.arrows.splice(i, 1);
@@ -319,12 +347,12 @@
         orc.attackClock -= dt;
         orc.action = .45;
         if (orc.attackClock <= 0) {
-          defender.hp -= tier.damage;
+          defender.hp -= orc.damage;
           defender.flash = .18;
           orc.attackClock = tier.attackInterval;
         }
       } else {
-        orc.x -= tier.speed * dt;
+        orc.x -= orc.speed * dt;
         orc.attackClock = 0;
       }
     }
@@ -412,6 +440,11 @@
     ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.footY - h - 20, 84, 11);
     ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.footY - h - 18, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
     ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.footY - h - 20, 84, 11);
+    // Level badge left of the health bar, coloured by tier.
+    ctx.fillStyle = tier.badge; ctx.beginPath(); ctx.arc(orc.x - 52, orc.footY - h - 14.5, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1a120f'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#1a120f'; ctx.font = '700 12px Rubik, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(tier.level), orc.x - 52, orc.footY - h - 14);
   }
   function draw() {
     if (state.scene === 'menu') return;
@@ -461,7 +494,10 @@
     if (event.code === 'Space') { event.preventDefault(); togglePause(); }
     if (event.code === 'Escape' && state.scene === 'playing') pause();
   });
+  // Read-only handle for game/balance-sim.cjs, which plays the game headlessly.
+  window.GAME_DEBUG = { state, cellAt, update, draw };
   buildMenu();
+  buildDifficulty();
   buildCards();
   requestAnimationFrame(loop);
 })();
