@@ -2,6 +2,10 @@
 
 Pixel-art assets for a five-lane fantasy defense game.
 
+## Играбельный прототип
+
+Откройте [game/index.html](game/index.html) в браузере. Правила и управление — в [game/README.md](game/README.md), числа баланса — в [game/balance.js](game/balance.js).
+
 ## Contents
 
 - `characters/animated-v2/` — four hero classes with idle, run and action poses; the warrior and healer have four levels.

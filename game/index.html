@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17251e">
+  <title>Последний форпост — оборона пяти дорог</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="balance.js" defer></script>
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main id="app">
+    <section id="menu" class="menu" aria-labelledby="menu-title">
+      <div class="menu-art" aria-hidden="true"></div>
+      <div class="menu-content">
+        <div class="brand">Последний форпост</div>
+        <h1 id="menu-title">Удержи<br>пять дорог</h1>
+        <p class="menu-lede">Расставляй лучников. Останавливай орков. Защити ворота до конца четвёртой волны.</p>
+        <h2>Выбери локацию</h2>
+        <div id="location-list" class="location-list"></div>
+        <button id="start-button" class="primary-button" type="button">Начать оборону</button>
+        <p class="menu-hint">Игра мышью или касанием · Пауза — пробел</p>
+      </div>
+      <div class="menu-sprite" aria-hidden="true"></div>
+    </section>
+
+    <section id="game-screen" class="game-screen hidden" aria-label="Игровое поле">
+      <header class="game-header">
+        <div class="game-brand"><span>Последний<br>форпост</span><small id="location-name"></small></div>
+        <div class="readouts">
+          <div class="readout gold"><span class="readout-icon">✦</span><span><small>Монеты</small><strong id="gold-value">0</strong></span></div>
+          <div class="readout"><span class="readout-icon">▰</span><span><small>Волна</small><strong id="wave-value">1 / 4</strong></span></div>
+          <div class="readout"><span class="readout-icon">♥</span><span><small>Ворота</small><strong id="lives-value">5</strong></span></div>
+        </div>
+        <div class="header-actions">
+          <button id="pause-button" type="button">Пауза</button>
+          <button id="menu-button" type="button">Меню</button>
+        </div>
+      </header>
+      <div class="board-shell">
+        <canvas id="board" width="1672" height="941" aria-label="Пять дорожек. Выберите лучника ниже, затем клетку на поле."></canvas>
+        <div id="board-message" class="board-message" aria-live="polite"></div>
+      </div>
+      <footer class="game-footer">
+        <div class="footer-intro"><strong>Лучники</strong><span>Выбери бойца, затем свободную клетку</span></div>
+        <div id="archer-cards" class="archer-cards"></div>
+        <div class="footer-detail" id="selected-detail" aria-live="polite"></div>
+      </footer>
+    </section>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-card">
+        <span class="modal-mark" id="modal-mark"></span>
+        <h2 id="modal-title"></h2>
+        <p id="modal-copy"></p>
+        <div id="modal-actions" class="modal-actions"></div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
