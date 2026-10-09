@@ -36,9 +36,9 @@ window.GAME_BALANCE = Object.freeze({
   firstWaveDelay: 7,
   // Difficulty scales enemies and the economy on top of the location.
   difficulties: [
-    { id: 'easy', name: 'Лёгкая', subtitle: 'Для знакомства', startingGold: 260, startingLives: 7, passiveGold: 12, enemyHealth: 0.75, enemyDamage: 0.85, enemySpeed: 0.95, reward: 1.1 },
-    { id: 'normal', name: 'Обычная', subtitle: 'Нужна расстановка', startingGold: 210, startingLives: 5, passiveGold: 9, enemyHealth: 1, enemyDamage: 1, enemySpeed: 1, reward: 1 },
-    { id: 'hard', name: 'Тяжёлая', subtitle: 'Каждая монета на счету', startingGold: 220, startingLives: 3, passiveGold: 8, enemyHealth: 1.1, enemyDamage: 1.15, enemySpeed: 1.05, reward: 0.9 }
+    { id: 'easy', name: 'Лёгкая', subtitle: 'Для знакомства', startingGold: 260, startingLives: 7, passiveGold: 12, enemyHealth: 0.75, healthRamp: 0, enemyDamage: 0.85, enemySpeed: 0.95, reward: 1.1 },
+    { id: 'normal', name: 'Обычная', subtitle: 'Нужна расстановка', startingGold: 210, startingLives: 5, passiveGold: 9, enemyHealth: 1, healthRamp: 0.05, enemyDamage: 1, enemySpeed: 1, reward: 1 },
+    { id: 'hard', name: 'Тяжёлая', subtitle: 'Каждая монета на счету', startingGold: 220, startingLives: 3, passiveGold: 8, enemyHealth: 1.15, healthRamp: 0.12, enemyDamage: 1.2, enemySpeed: 1.08, reward: 0.85 }
   ],
   locations: [
     { id: 'forest', name: 'Лесной форпост', subtitle: 'Сумеречная граница', image: '../locations/forest-outpost.png', enemyHealth: 1, reward: 1 },

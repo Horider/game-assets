@@ -45,47 +45,85 @@ function play(locationIndex, difficultyIndex, bot) {
   return { won: state.scene === 'won', lives: state.lives, wave: state.wave + 1, earned: Math.round(earned), archers: state.archers.length, lostArchers, leaks };
 }
 
+const LANES = [0, 1, 2, 3, 4];
+const SPAWN_ORDER = [0, 2, 4, 1, 3]; // lanes in the order the first orcs of a wave use
 const dps = u => u.attack * u.speed;
-const laneDps = (state, B, lane) => state.archers.filter(a => a.lane === lane).reduce((s, a) => s + dps(B.archerLevels[a.level]), 0);
-const weakestLane = (state, B) => [0, 1, 2, 3, 4].sort((a, b) => laneDps(state, B, a) - laneDps(state, B, b))[0];
-const freeColumn = (state, lane, from = 1) => { for (let c = from; c < 7; c++) if (!state.archers.some(a => a.lane === lane && a.column === c)) return c; return null; };
+const laneArchers = (state, lane) => state.archers.filter(a => a.lane === lane);
+const laneDps = (state, B, lane) => laneArchers(state, lane).reduce((s, a) => s + dps(B.archerLevels[a.level]), 0);
+const freeColumn = (state, B, lane, from) => {
+  const columns = window_columns(state, B);
+  for (let c = from; c < columns; c++) if (!state.archers.some(a => a.lane === lane && a.column === c)) return c;
+  for (let c = from - 1; c >= 0; c--) if (!state.archers.some(a => a.lane === lane && a.column === c)) return c;
+  return null;
+};
+const window_columns = () => 7;
+// Incoming orc health per unit of lane damage: the lane that will break first.
+const threat = (state, B, lane) => {
+  const hp = state.orcs.filter(o => o.lane === lane).reduce((s, o) => s + o.hp, 0);
+  return (hp + 1) / (laneDps(state, B, lane) + 1);
+};
+const weakest = (state, B) => [...LANES].sort((a, b) => laneDps(state, B, a) - laneDps(state, B, b))[0];
+const mostThreatened = (state, B) => [...LANES].sort((a, b) => threat(state, B, b) - threat(state, B, a))[0];
+const fewest = state => [...LANES].sort((a, b) => laneArchers(state, a).length - laneArchers(state, b).length)[0];
+
+function buy(api, lane, level, column) {
+  const { state, B, click, select } = api;
+  if (B.archerLevels[level].cost > state.gold) return false;
+  const c = freeColumn(state, B, lane, column); if (c === null) return false;
+  select(level); click(lane, c); return true;
+}
+function upgradeIn(api, lane) {
+  const { state } = api;
+  const target = laneArchers(state, lane).filter(a => a.level < 3).sort((a, b) => a.level - b.level)[0];
+  if (!target) return false;
+  const before = state.gold; api.click(target.lane, target.column); return state.gold < before;
+}
+function cover(api, level, order, column) {
+  const empty = order.find(l => !laneArchers(api.state, l).length);
+  if (empty === undefined) return 'done';
+  buy(api, empty, level, column);
+  return 'busy';
+}
+// Best damage-per-coin action that is affordable right now in `lane`.
+function bestNow(api, lane, column) {
+  const { state, B } = api;
+  const options = [];
+  for (let l = 0; l < 4; l++) if (B.archerLevels[l].cost <= state.gold) options.push({ v: dps(B.archerLevels[l]) / B.archerLevels[l].cost, run: () => buy(api, lane, l, column) });
+  const up = laneArchers(state, lane).filter(a => a.level < 3).sort((a, b) => a.level - b.level)[0];
+  if (up) { const next = B.archerLevels[up.level + 1], cost = Math.round(next.cost * B.upgradeCostFactor);
+    if (cost <= state.gold) options.push({ v: (dps(next) - dps(B.archerLevels[up.level])) / cost, run: () => upgradeIn(api, lane) }); }
+  options.sort((a, b) => b.v - a.v);
+  for (const o of options) if (o.run()) return true;
+  return false;
+}
+const urgent = (state, B, lane) => state.orcs.some(o => o.lane === lane && o.x < 900) && threat(state, B, lane) > 8;
 
 const bots = {
-  // Buys the cheapest archer whenever it can, spreading lanes evenly.
-  naive({ state, B, click, select }) {
-    if (state.gold < B.archerLevels[0].cost) return;
-    const lane = [0, 1, 2, 3, 4].sort((a, b) => state.archers.filter(x => x.lane === a).length - state.archers.filter(x => x.lane === b).length)[0];
-    const column = freeColumn(state, lane); if (column === null) return;
-    select(0); click(lane, column);
-  },
-  // Covers every lane, then strengthens the weakest lane with upgrades.
-  upgrader({ state, B, click, select }) {
-    const empty = [0, 1, 2, 3, 4].find(l => !state.archers.some(a => a.lane === l));
-    if (empty !== undefined) { if (state.gold >= B.archerLevels[0].cost) { select(0); click(empty, 1); } return; }
-    const lane = weakestLane(state, B);
-    const target = state.archers.filter(a => a.lane === lane && a.level < 3).sort((a, b) => a.level - b.level)[0];
-    if (target) { click(target.lane, target.column); return; }
-    const column = freeColumn(state, lane); if (column !== null && state.gold >= 65) { select(0); click(lane, column); }
-  },
-  // Covers every lane, then buys the strongest affordable archer for the weakest lane.
-  smart({ state, B, click, select }) {
-    const empty = [0, 1, 2, 3, 4].find(l => !state.archers.some(a => a.lane === l));
-    const lane = empty !== undefined ? empty : weakestLane(state, B);
-    const wantLevel = empty !== undefined ? 0 : 3;
-    let level = wantLevel; while (level > 0 && B.archerLevels[level].cost > state.gold) level--;
-    if (empty === undefined && level < 2) return; // save up instead of buying weak archers
-    if (B.archerLevels[level].cost > state.gold) return;
-    const column = freeColumn(state, lane); if (column === null) return;
-    select(level); click(lane, column);
-  }
+  'Спам ур.1':          api => buy(api, fewest(api.state), 0, 1),
+  'Спам ур.2':          api => buy(api, fewest(api.state), 1, 1),
+  'Спам ур.3':          api => buy(api, fewest(api.state), 2, 1),
+  'Только ур.4':        api => buy(api, weakest(api.state, api.B), 3, 1),
+  'Ряды+апгрейды':      api => cover(api, 0, LANES, 1) === 'done' && upgradeIn(api, weakest(api.state, api.B)),
+  'Ряды+копить ур.4':   api => cover(api, 0, LANES, 1) === 'done' && buy(api, weakest(api.state, api.B), 3, 1),
+  'Угроза+выгода':      api => cover(api, 0, SPAWN_ORDER, 1) === 'done' && bestNow(api, mostThreatened(api.state, api.B), 1),
+  'Угроза+копить':      api => { if (cover(api, 0, SPAWN_ORDER, 1) !== 'done') return; const lane = mostThreatened(api.state, api.B);
+                                  if (urgent(api.state, api.B, lane)) bestNow(api, lane, 1); else buy(api, lane, 3, 1); },
+  'Задний ряд':         api => cover(api, 0, SPAWN_ORDER, 0) === 'done' && bestNow(api, mostThreatened(api.state, api.B), 0),
+  'Передний ряд':       api => cover(api, 0, SPAWN_ORDER, 3) === 'done' && bestNow(api, mostThreatened(api.state, api.B), 3)
 };
 
 const B = (() => { const w = {}; vm.runInContext(fs.readFileSync(path.join(__dirname, 'balance.js'), 'utf8'), vm.createContext({ window: w })); return w.GAME_BALANCE; })();
-console.log('Bot results: W(lives left) or L@wave, archers lost, gate leaks per wave');
+const only = process.argv[2];
+console.log('10 тактик × 4 карты. W(n) — победа, n жизней осталось; L@n — поражение на волне n; 🏹 — потеряно лучников');
+const summary = {};
 for (const [di, d] of B.difficulties.entries()) {
-  console.log(`\n${d.name}`);
+  if (only && d.id !== only) continue;
+  console.log(`\n${d.name}`.padEnd(20) + B.locations.map(l => l.name.padEnd(18)).join(''));
+  let wins = 0, total = 0;
   for (const name of Object.keys(bots)) {
-    const row = B.locations.map((l, li) => { const r = play(li, di, bots[name]); return (r.won ? `W(${r.lives})` : `L@${r.wave}`).padEnd(6) + ` −${r.lostArchers}🏹 ` + `leaks ${r.leaks.join('')}`; });
-    console.log(`  ${name.padEnd(9)} ${row.join(' | ')}`);
+    const row = B.locations.map((l, li) => { const r = play(li, di, bots[name]); total++; if (r.won) wins++;
+      return ((r.won ? `W(${r.lives})` : `L@${r.wave}`) + ` −${r.lostArchers}🏹`).padEnd(18); });
+    console.log(`  ${name.padEnd(18)}${row.join('')}`);
   }
+  console.log(`  Побед: ${wins} из ${total}`);
 }

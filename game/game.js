@@ -268,7 +268,8 @@
     const mode = difficulty();
     // Cycle lanes before repeating, with a different starting lane each wave.
     const lane = (state.spawned * 2 + state.wave) % B.lanes;
-    const hp = Math.round(tier.health * location.enemyHealth * mode.enemyHealth);
+    // Later waves get tougher faster on harder modes (healthRamp per wave).
+    const hp = Math.round(tier.health * location.enemyHealth * mode.enemyHealth * (1 + mode.healthRamp * state.wave));
     const laneCell = cellAt(lane, 0);
     state.orcs.push({ x: B.spawnX, lane, y: laneCell.y, footY: laneCell.y, level,
       hp, maxHp: hp, damage: tier.damage * mode.enemyDamage, speed: tier.speed * mode.enemySpeed,
