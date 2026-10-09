@@ -1,0 +1,22 @@
+{
+  "frame_size": [
+    1672,
+    941
+  ],
+  "frames_per_location": 50,
+  "fps": 10,
+  "loop_ms": 5000,
+  "format": "transparent full-size RGBA PNG overlays",
+  "backgrounds": {
+    "frost-pass": "../frost-pass.png",
+    "marsh-crossing": "../marsh-crossing.png",
+    "ruined-cemetery": "../ruined-cemetery.png",
+    "forest-outpost": "../forest-outpost.png"
+  },
+  "effects": {
+    "frost-pass": "falling snow",
+    "marsh-crossing": "blinking drifting fireflies",
+    "ruined-cemetery": "drifting fog and castle light pulse in frames 46-48 (once per 5 seconds)",
+    "forest-outpost": "warm flickering halos around existing lamps and fire"
+  }
+}
