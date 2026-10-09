@@ -401,12 +401,14 @@
       ctx.strokeStyle = `rgba(255,224,140,${archer.glow * 1.6})`; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(archer.x, archer.footY, 30 + (.6 - archer.glow) * 60, 10 + (.6 - archer.glow) * 20, 0, 0, Math.PI * 2); ctx.stroke();
     }
-    // Level pips under the archer's feet.
-    for (let i = 0; i <= archer.level; i++) {
-      const px = archer.x + (i - archer.level / 2) * 9;
-      ctx.fillStyle = '#1b130a'; ctx.beginPath(); ctx.arc(px, archer.footY + 17, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#f1c86e'; ctx.beginPath(); ctx.arc(px, archer.footY + 17, 2.6, 0, Math.PI * 2); ctx.fill();
-    }
+    drawLevelBadge(archer.x - 46, archer.footY - h - 11, unit.level, unit.badge);
+  }
+  // Numbered tier circle drawn beside a unit's head, shared by archers and orcs.
+  function drawLevelBadge(x, y, level, color) {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1a120f'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#1a120f'; ctx.font = '700 12px Rubik, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(level), x, y + .5);
   }
   function drawHover(cell) {
     const { left, right, top, bottom } = cell;
@@ -441,11 +443,7 @@
     ctx.fillStyle = '#1a120fe8'; ctx.fillRect(orc.x - 42, orc.footY - h - 20, 84, 11);
     ctx.fillStyle = '#a52e27'; ctx.fillRect(orc.x - 40, orc.footY - h - 18, 80 * Math.max(0, orc.hp / orc.maxHp), 7);
     ctx.strokeStyle = '#e0bd7c'; ctx.lineWidth = 1; ctx.strokeRect(orc.x - 42, orc.footY - h - 20, 84, 11);
-    // Level badge left of the health bar, coloured by tier.
-    ctx.fillStyle = tier.badge; ctx.beginPath(); ctx.arc(orc.x - 52, orc.footY - h - 14.5, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#1a120f'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#1a120f'; ctx.font = '700 12px Rubik, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(tier.level), orc.x - 52, orc.footY - h - 14);
+    drawLevelBadge(orc.x - 52, orc.footY - h - 14.5, tier.level, tier.badge);
   }
   function draw() {
     if (state.scene === 'menu') return;
